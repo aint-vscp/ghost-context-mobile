@@ -373,7 +373,7 @@ async function sendChat(text) {
     }
   } catch (e) {
     aiBubble.innerHTML = `<em style="color:var(--warn)">⚠ ${escapeHtml(e.message)}</em>`;
-    setAiState(false);
+    pingOllama();
   } finally {
     currentAbort = null;
   }
@@ -432,7 +432,7 @@ async function runQuick(q) {
   try {
     await callOllama([{role:'system',content:system},{role:'user',content:q}], append);
   } catch (e) {
-    out.textContent = '⚠ ' + e.message; setAiState(false);
+    out.textContent = '⚠ ' + e.message; pingOllama();
   }
 }
 
@@ -465,6 +465,27 @@ function ocrStatus(msg) { $('#ocr-status').textContent = msg || ''; }
 
 async function extractMarkdownOrTxt(file) {
   return await file.text();
+}
+
+async function extractImage(file) {
+  const Tess = await loadTesseract();
+  const url = URL.createObjectURL(file);
+  let worker = null;
+  try {
+    ocrStatus(`OCR ${file.name}…`);
+    worker = await Tess.createWorker(STATE.cfg.ocrLang, 1, {
+      logger: m => {
+        if (m.status === 'recognizing text' && typeof m.progress === 'number') {
+          ocrStatus(`OCR ${file.name} · ${Math.round(m.progress*100)}%`);
+        }
+      },
+    });
+    const { data } = await worker.recognize(url);
+    return (data.text || '').trim();
+  } finally {
+    URL.revokeObjectURL(url);
+    if (worker) await worker.terminate();   // free RAM immediately
+  }
 }
 
 async function extractPptx(file) {
@@ -525,6 +546,8 @@ async function extractPdf(file) {
   return { text: fullText, pages };
 }
 
+const IMG_EXT = /\.(png|jpe?g|webp|bmp|gif|tiff?)$/i;
+
 async function ingestFile(file) {
   const name = file.name;
   const lower = name.toLowerCase();
@@ -538,6 +561,8 @@ async function ingestFile(file) {
     } else if (lower.endsWith('.pdf')) {
       const r = await extractPdf(file);
       text = r.text; pages = r.pages;
+    } else if (IMG_EXT.test(lower) || (file.type && file.type.startsWith('image/'))) {
+      text = await extractImage(file);
     } else { throw new Error('unsupported: ' + name); }
   } catch (e) {
     ocrStatus('error: ' + e.message);
@@ -565,12 +590,17 @@ async function ingestFile(file) {
 }
 
 async function handleFiles(files) {
-  for (const f of files) {
+  const list = Array.from(files);
+  let ok = 0, fail = 0;
+  for (let i = 0; i < list.length; i++) {
+    const f = list[i];
+    ocrStatus(`(${i+1}/${list.length}) ${f.name}`);
     try {
       await ingestFile(f);
+      ok++;
     } catch (e) {
-      console.error(e);
-      ocrStatus('failed: ' + e.message);
+      console.error('ingest failed', f.name, e);
+      fail++;
     }
   }
   // reload KB and reindex
@@ -578,6 +608,7 @@ async function handleFiles(files) {
   STATE.kb.files = {};
   await loadPrebuiltKB();
   await loadUserKB();
+  ocrStatus(`done · ${ok} ingested${fail?`, ${fail} failed`:''}`);
 }
 
 // ---------- library UI ----------
@@ -630,22 +661,30 @@ function setupVoice() {
 
 // ---------- model discovery / Ollama ping ----------
 async function pingOllama() {
+  const url = STATE.cfg.endpoint.replace(/\/$/,'') + '/api/tags';
   try {
-    const r = await fetch(STATE.cfg.endpoint.replace(/\/$/,'') + '/api/tags', { cache:'no-store' });
-    if (!r.ok) throw 0;
+    const r = await fetch(url, { cache:'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
     STATE.models = (j.models || []).map(m => m.name);
     setAiState(true);
     refreshModelDropdown();
-  } catch {
-    setAiState(false);
+  } catch (e) {
+    // CORS failures show as TypeError "Failed to fetch" with no .status — surface a hint
+    const isCORSish = e instanceof TypeError;
+    console.warn('[ghost] ollama ping failed for', url, e);
+    setAiState(false, isCORSish
+      ? `AI offline. Reach to ${STATE.cfg.endpoint} failed (likely CORS or Ollama not running). Start Ollama with OLLAMA_ORIGINS=* and retry.`
+      : `AI offline. ${e.message} at ${STATE.cfg.endpoint}.`);
   }
 }
-function setAiState(ok) {
+function setAiState(ok, msg) {
   const el = $('#ai-state');
   el.dataset.ok = ok ? '1' : '0';
   el.textContent = ok ? 'AI · online' : 'AI · offline';
-  $('#ai-banner').hidden = !!ok;
+  const banner = $('#ai-banner');
+  banner.hidden = !!ok;
+  if (!ok && msg) banner.textContent = msg;
 }
 function refreshModelDropdown() {
   const sel = $('#cfg-model');

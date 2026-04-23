@@ -25,8 +25,11 @@ fi
 
 # start ollama if not already serving
 if ! curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
-  echo "## starting ollama (background)"
-  OLLAMA_NUM_THREAD="${OLLAMA_NUM_THREAD:-6}" OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE:-5m}" \
+  echo "## starting ollama (background, with CORS open for the web app)"
+  OLLAMA_HOST="${OLLAMA_HOST:-127.0.0.1:11434}" \
+  OLLAMA_ORIGINS="${OLLAMA_ORIGINS:-*}" \
+  OLLAMA_NUM_THREAD="${OLLAMA_NUM_THREAD:-6}" \
+  OLLAMA_KEEP_ALIVE="${OLLAMA_KEEP_ALIVE:-5m}" \
     nohup ollama serve >ollama.log 2>&1 &
   # wait for ready
   for i in $(seq 1 30); do

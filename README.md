@@ -24,7 +24,9 @@ cd ghost-context-mobile
 npm install --omit=dev
 
 # 4. start Ollama in the background and pull the model (~1 GB, one time)
-OLLAMA_NUM_THREAD=6 OLLAMA_KEEP_ALIVE=5m nohup ollama serve >ollama.log 2>&1 &
+#    OLLAMA_ORIGINS=* lets the web app (served from :8787) talk to Ollama (on :11434)
+OLLAMA_ORIGINS=* OLLAMA_NUM_THREAD=6 OLLAMA_KEEP_ALIVE=5m \
+  nohup ollama serve >ollama.log 2>&1 &
 ollama pull qwen2.5:1.5b
 
 # 5. start the web app
@@ -54,6 +56,36 @@ It boots Ollama if it isn't already running, pulls `qwen2.5:1.5b` if missing, th
 pkill -f "node server.js"   # or that, from another shell
 pkill ollama                # stop the model server
 ```
+
+### Troubleshooting
+
+**❗ "AI offline" banner even though `node server.js` is up**
+
+`server.js` only serves the *web UI*. The AI lives in **Ollama**, a separate process. Two common causes:
+
+1. **Ollama isn't running.** Start it on the phone:
+   ```sh
+   OLLAMA_ORIGINS=* OLLAMA_NUM_THREAD=6 nohup ollama serve >ollama.log 2>&1 &
+   curl -sf http://localhost:11434/api/tags && echo "OK"
+   ```
+   Or just use `bash run-termux.sh` which does this for you.
+
+2. **CORS is blocking the browser.** The page is served from `http://localhost:8787` and tries to `fetch('http://localhost:11434/...')`. Recent Ollama versions reject cross-origin requests unless you explicitly allow them. The fix is **`OLLAMA_ORIGINS=*`** when launching Ollama (already set by `run-termux.sh`).
+
+   To verify, open Chrome DevTools (`chrome://inspect` from a desktop, or remote debug your phone) — you'll see `CORS error` on the failing request if this is the cause.
+
+**❗ I'm using a desktop browser pointing at the phone**
+
+Then `http://localhost:11434` in the app config points at your *desktop*, not the phone. Change CFG → Ollama endpoint to `http://<phone-LAN-ip>:11434`, and start Ollama on the phone with `OLLAMA_HOST=0.0.0.0:11434 OLLAMA_ORIGINS=* ollama serve` so it accepts LAN connections.
+
+**Where does the AI actually live?**
+
+When you follow the Quick Start above, **everything runs on the phone**:
+- `node server.js` → serves the web UI on `:8787`
+- `ollama serve` → runs the LLM locally on `:11434`
+- `qwen2.5:1.5b` model weights live on the phone's storage (~1 GB)
+
+No network calls leave the device after the one-time `ollama pull`. Even with airplane mode on, the app and AI keep working.
 
 ---
 
@@ -145,8 +177,8 @@ JS+CSS payload: **39 KB**. PDF.js, JSZip, Tesseract.js are **lazy-loaded from CD
 | Single static app, no build, vanilla JS | `public/` |
 | Streaming `/api/chat`, rAF-throttled at ~30 fps | `app.js` → `callOllama` + `throttledAppender` |
 | RAG with TF-IDF (top-K, cosine) | `app.js` → `retrieve` / `buildSystem` |
-| PDF + PPTX + MD ingestion | `extractPdf`, `extractPptx`, `extractMarkdownOrTxt` |
-| OCR fallback w/ live progress + Eng/Tagalog dropdown | `extractPdf` → Tesseract.js worker, terminated after use |
+| PDF + PPTX + MD + image (PNG/JPG/WEBP) ingestion | `extractPdf`, `extractPptx`, `extractMarkdownOrTxt`, `extractImage` |
+| OCR fallback for scanned PDFs **and** standalone images, multi-file batched, w/ live progress + Eng/Tagalog dropdown | `extractPdf`/`extractImage` → Tesseract.js worker, terminated after each file |
 | 512/64-token chunking | `chunkText` |
 | Library tab w/ delete, drag-drop, persistent IDB | `view-lib`, `dbDeleteFile`, `handleFiles` |
 | Quick Ask, top-1 context, single-shot | `view-quick`, `runQuick` |
