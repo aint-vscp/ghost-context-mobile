@@ -239,10 +239,34 @@ main { position: relative; overflow: hidden; }
 .vault { padding: 12px; height: 100%; overflow-y: auto; padding-bottom: calc(20px + var(--safe-b)); }
 .vault-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .vault-title { font-family: var(--mono); color: var(--acc); letter-spacing: .12em; font-size: 13px; }
+/* ---- library upload buttons (compact, label-wrapped, Android-safe) ---- */
+.upload-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .upload-btn {
-  font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
-  border: 1px solid var(--acc-dim); color: var(--acc); padding: 7px 12px;
+  position: relative;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 36px; padding: 0 10px;
+  background: var(--bg-1);
+  color: var(--fg);
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
   cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease, transform .08s ease;
+}
+.upload-btn svg { color: var(--muted); transition: color .15s ease; }
+.upload-btn:hover  { color: var(--acc); border-color: var(--acc-dim); }
+.upload-btn:hover svg { color: var(--acc); }
+.upload-btn:active { transform: scale(.97); background: var(--bg-2); }
+.upload-btn.cam svg { color: var(--acc-dim); }
+/* Visually hide the file input (Android Chrome refuses to open the picker
+   when the input is display:none, so we must keep it rendered). */
+.upload-btn input[type="file"] {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  border: 0; clip: rect(0 0 0 0);
+  overflow: hidden; opacity: 0;
+  pointer-events: none;
 }
 .dropzone {
   border: 1px dashed var(--line-2); padding: 22px; text-align: center;
@@ -320,9 +344,6 @@ body.ai-busy #ai-state::after { content:" · …"; color:var(--accent); }
 }
 .banner-retry:hover { background:var(--accent); color:#000; }
 
-/* --- camera + ingest row --- */
-.upload-row { display:flex; gap:8px; flex-wrap:wrap; }
-.upload-btn.cam { background:#001a14; }
 
 /* --- in-chat scan (OCR'd questionnaire bubble) --- */
 .scan-tag {

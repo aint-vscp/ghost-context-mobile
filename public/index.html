@@ -91,13 +91,19 @@
           <div class="muted" id="lib-stats">…</div>
         </div>
       <div class="upload-row">
-        <label class="upload-btn">
-          📂 INGEST FILES
-          <input type="file" id="file-input" accept=".pdf,.pptx,.md,.markdown,.txt,image/*,.png,.jpg,.jpeg,.webp,.bmp" multiple hidden>
+        <label class="upload-btn" id="ingest-btn" title="Upload PDF / PPTX / MD / images">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+          </svg>
+          <span>UPLOAD</span>
+          <input type="file" id="file-input" accept=".pdf,.pptx,.md,.markdown,.txt,image/*,.png,.jpg,.jpeg,.webp,.bmp" multiple>
         </label>
-        <label class="upload-btn cam">
-          📷 TAKE PHOTOS
-          <input type="file" id="camera-input" accept="image/*" capture="environment" multiple hidden>
+        <label class="upload-btn cam" id="lib-cam-btn" title="Take photos (multi-shot)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.5"/>
+          </svg>
+          <span>CAMERA</span>
+          <input type="file" id="camera-input" accept="image/*" capture="environment" multiple>
         </label>
       </div>
       </div>
@@ -124,7 +130,7 @@
     <div class="cfg">
       <div class="cfg-row">
         <label>Ollama endpoint</label>
-        <input type="text" id="cfg-endpoint" value="http://localhost:11434">
+        <input type="text" id="cfg-endpoint" value="/api/ollama">
       </div>
       <div class="cfg-row">
         <label>Model</label>

@@ -23,8 +23,15 @@ const STATE = {
 
 function loadCfg() {
   let c = {};
+  let migrated = false;
   try { c = JSON.parse(localStorage.getItem('ghost.cfg') || '{}'); } catch {}
-  return Object.assign({
+  // Migration: any persisted absolute "http://localhost:11434" (or :host:11434) -> same-origin proxy.
+  // The proxy in server.js eliminates CORS, which is the #1 cause of "Ollama offline" on phones.
+  if (typeof c.endpoint === 'string' && /^https?:\/\/[^/]+:11434\/?$/i.test(c.endpoint)) {
+    c.endpoint = '/api/ollama';
+    migrated = true;
+  }
+  const merged = Object.assign({
     endpoint: '/api/ollama',
     model: 'qwen2.5:1.5b',
     temp: 0.4,
@@ -32,6 +39,11 @@ function loadCfg() {
     rag: true,
     ocrLang: 'eng',
   }, c);
+  // Persist the migration immediately so the next ping sees it.
+  if (migrated) {
+    try { localStorage.setItem('ghost.cfg', JSON.stringify(merged)); } catch {}
+  }
+  return merged;
 }
 function saveCfg() { localStorage.setItem('ghost.cfg', JSON.stringify(STATE.cfg)); }
 
