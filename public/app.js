@@ -767,25 +767,8 @@ async function scanAndAnswer(fileList, fromCamera) {
   }
 }
 
-// ---------- voice ----------
-function setupVoice() {
-  const btn = $('#mic-btn');
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { btn.title = 'voice not supported'; btn.onclick = () => addMessage('ai','*voice input unsupported on this browser*'); return; }
-  let rec = null, on = false;
-  btn.onclick = () => {
-    if (on) { rec && rec.stop(); return; }
-    rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true; rec.continuous = false;
-    rec.onstart = () => { on = true; btn.classList.add('rec'); };
-    rec.onresult = (e) => {
-      let s=''; for (const r of e.results) s += r[0].transcript;
-      $('#input').value = s;
-    };
-    rec.onerror = () => {};
-    rec.onend = () => { on = false; btn.classList.remove('rec'); };
-    rec.start();
-  };
-}
+// ---------- voice (disabled — removed by user request) ----------
+function setupVoice() { /* intentionally no-op */ }
 
 // ---------- model discovery / Ollama ping ----------
 async function pingOllama() {

@@ -11,3 +11,6 @@ tools/mock-ollama.js
 *.log
 *.err
 
+tools/test-composer.js
+composer-mobile.png
+
