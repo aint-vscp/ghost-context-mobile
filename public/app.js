@@ -665,10 +665,10 @@ function renderLibrary() {
 
 // ---------- chat scan (OCR a physical questionnaire then answer it) ----------
 function setupChatScan() {
+  // Inputs are inside <label class="icon-btn"> — taps natively open the picker, no JS click() needed.
+  // We just listen for change events.
   const cam  = $('#scan-cam');
   const pick = $('#scan-pick');
-  $('#scan-btn').onclick      = () => cam.click();
-  $('#scan-pick-btn').onclick = () => pick.click();
   cam.addEventListener('change',  e => scanAndAnswer(e.target.files, true));
   pick.addEventListener('change', e => scanAndAnswer(e.target.files, false));
 }
@@ -777,8 +777,11 @@ async function pingOllama() {
   const ep = STATE.cfg.endpoint.replace(/\/$/,'');
   const sameOrigin = ep.startsWith('/');
   const url = sameOrigin ? '/healthz/ollama' : (ep + '/api/tags');
+  // Hard 5-second client-side timeout so the badge can never hang at "checking…"
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 5000);
   try {
-    const r = await fetch(url, { cache:'no-store' });
+    const r = await fetch(url, { cache:'no-store', signal: ac.signal });
     if (sameOrigin) {
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || 'upstream not ok');
@@ -792,11 +795,15 @@ async function pingOllama() {
     refreshModelDropdown();
     warmModel(); // pin into RAM in the background
   } catch (e) {
+    const isAbort  = e.name === 'AbortError';
     const isCORSish = e instanceof TypeError;
     console.warn('[ghost] ollama ping failed for', url, e);
-    setAiState(false, isCORSish
-      ? `AI offline. Cannot reach ${ep} from the browser (CORS or network). If using direct mode, restart Ollama with OLLAMA_ORIGINS=*. Best fix: keep endpoint as "/api/ollama" so server.js proxies for you.`
+    setAiState(false,
+      isAbort ? `AI offline. Ping to ${url} timed out after 5s. Is 'ollama serve' running in Termux?` :
+      isCORSish ? `AI offline. Cannot reach ${ep} from the browser (CORS or network). Best fix: keep endpoint as "/api/ollama" so server.js proxies for you.`
       : `AI offline. ${e.message}. Endpoint: ${ep}. Make sure 'ollama serve' is running.`);
+  } finally {
+    clearTimeout(t);
   }
 }
 // Send empty prompt with keep_alive so Ollama loads + pins the model in RAM.

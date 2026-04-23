@@ -337,3 +337,15 @@ body.ai-busy #ai-state::after { content:" · …"; color:var(--accent); }
   padding:6px 8px; font: 11px/1.4 var(--mono);
   color: #b8b8b8; margin:0;
 }
+
+/* file input lives inside .icon-btn label — invisible but rendered (Android Chrome
+   refuses to open the file picker for inputs with display:none) */
+.icon-btn input[type="file"] {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  border: 0; clip: rect(0 0 0 0);
+  overflow: hidden; opacity: 0;
+  pointer-events: none;
+}
+label.icon-btn { position: relative; }

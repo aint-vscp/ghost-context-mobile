@@ -50,20 +50,25 @@ app.all('/api/ollama/*', proxyToOllama);
 app.get('/healthz/ollama', async (_req, res) => {
   const opts = {
     protocol: ollamaUrl.protocol, hostname: ollamaUrl.hostname,
-    port: ollamaUrl.port || 80, path: '/api/tags', method: 'GET', timeout: 2000,
+    port: ollamaUrl.port || 80, path: '/api/tags', method: 'GET', timeout: 2500,
   };
+  let done = false;
+  const finish = (payload) => { if (done) return; done = true; res.json(payload); };
+  // server-side absolute deadline so the response can never hang
+  const dead = setTimeout(() => finish({ ok: false, error: 'server_timeout', ollama_url: OLLAMA_URL }), 4000);
   const r = http.request(opts, (ur) => {
     let body = '';
     ur.on('data', c => body += c);
     ur.on('end', () => {
+      clearTimeout(dead);
       try {
         const j = JSON.parse(body);
-        res.json({ ok: true, models: (j.models || []).map(m => m.name) });
-      } catch { res.json({ ok: false, error: 'bad_json' }); }
+        finish({ ok: true, models: (j.models || []).map(m => m.name) });
+      } catch { finish({ ok: false, error: 'bad_json' }); }
     });
   });
-  r.on('error', e => res.json({ ok: false, error: e.code || e.message, ollama_url: OLLAMA_URL }));
-  r.on('timeout', () => { r.destroy(); res.json({ ok: false, error: 'timeout', ollama_url: OLLAMA_URL }); });
+  r.on('error',   e => { clearTimeout(dead); finish({ ok: false, error: e.code || e.message, ollama_url: OLLAMA_URL }); });
+  r.on('timeout', () => { r.destroy(); clearTimeout(dead); finish({ ok: false, error: 'timeout', ollama_url: OLLAMA_URL }); });
   r.end();
 });
 
