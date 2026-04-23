@@ -1,0 +1,18 @@
+{
+  "name": "ghost-context-mobile",
+  "version": "1.0.0",
+  "description": "Mobile-first offline AI chat with local RAG, optimised for Unisoc T606 / Android 11",
+  "private": true,
+  "scripts": {
+    "prechunk": "node tools/prechunk.js",
+    "start": "node server.js",
+    "serve": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.1",
+    "pdfkit": "^0.18.0"
+  },
+  "devDependencies": {
+    "pdf-parse": "^1.1.4"
+  }
+}

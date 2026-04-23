@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" fill="#000"/>
+  <g fill="none" stroke="#00ff9c" stroke-width="3" stroke-linecap="square">
+    <path d="M48 64 Q48 36 96 36 Q144 36 144 64 V140 L132 128 L120 140 L108 128 L96 140 L84 128 L72 140 L60 128 L48 140 Z"/>
+    <circle cx="78" cy="86" r="6" fill="#00ff9c"/>
+    <circle cx="114" cy="86" r="6" fill="#00ff9c"/>
+  </g>
+  <text x="96" y="174" font-family="ui-monospace,Menlo,monospace" font-size="14" fill="#00ff9c" text-anchor="middle" letter-spacing="3">GHOST</text>
+</svg>
