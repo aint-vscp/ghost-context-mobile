@@ -262,7 +262,7 @@ function thinkingDots() {
 }
 
 // ---------- streaming chat to Ollama ----------
-async function callOllama(messages, onToken, signal) {
+async function callOllama(messages, onToken, signal, opts={}) {
   const base = STATE.cfg.endpoint.replace(/\/$/,'');
   // accept either same-origin proxy ("/api/ollama") or absolute "http://host:11434"
   const url = base.endsWith('/api') || base.endsWith('/api/ollama') ? base + '/chat' : base + '/api/chat';
@@ -271,7 +271,10 @@ async function callOllama(messages, onToken, signal) {
     messages,
     stream: true,
     keep_alive: '24h', // pin model in RAM so it doesn't reload on every send (huge on mobile)
-    options: { temperature: STATE.cfg.temp, num_thread: 6, num_ctx: 2048 },
+    options: Object.assign(
+      { temperature: STATE.cfg.temp, num_thread: 6, num_ctx: 2048 },
+      opts.options || {}
+    ),
   };
   const res = await fetch(url, {
     method: 'POST', headers: {'Content-Type':'application/json'},
@@ -660,6 +663,110 @@ function renderLibrary() {
   $('#lib-stats').textContent = `${STATE.kb.chunks.length} chunks · ${Object.keys(STATE.kb.files).length} files · prebuilt: ${STATE.prebuiltCount}`;
 }
 
+// ---------- chat scan (OCR a physical questionnaire then answer it) ----------
+function setupChatScan() {
+  const cam  = $('#scan-cam');
+  const pick = $('#scan-pick');
+  $('#scan-btn').onclick      = () => cam.click();
+  $('#scan-pick-btn').onclick = () => pick.click();
+  cam.addEventListener('change',  e => scanAndAnswer(e.target.files, true));
+  pick.addEventListener('change', e => scanAndAnswer(e.target.files, false));
+}
+
+async function scanAndAnswer(fileList, fromCamera) {
+  const files = Array.from(fileList || []).filter(f => /^image\//.test(f.type));
+  if (!files.length) return;
+
+  // show a user bubble that streams its OCR progress in place
+  const userBubble = addMessage('user', '');
+  userBubble.innerHTML = `<em class="thinking-pulse">📷 scanning ${files.length} image${files.length>1?'s':''}…</em>`;
+  document.body.classList.add('ai-busy');
+
+  const parts = [];
+  try {
+    for (let i=0; i<files.length; i++) {
+      const f = files[i];
+      userBubble.innerHTML = `<em class="thinking-pulse">📷 OCR ${i+1}/${files.length} · ${escapeHtml(f.name)}…</em>`;
+      const text = (await extractImage(f)).trim();
+      if (text) parts.push(`--- page ${i+1} (${f.name}) ---\n${text}`);
+    }
+  } catch (e) {
+    userBubble.innerHTML = `<em style="color:var(--warn)">OCR failed: ${escapeHtml(e.message)}</em>`;
+    document.body.classList.remove('ai-busy');
+    return;
+  } finally {
+    ocrStatus('');
+    // reset inputs so picking the same file again still fires change
+    $('#scan-cam').value = ''; $('#scan-pick').value = '';
+  }
+
+  const ocrText = parts.join('\n\n').trim();
+  if (!ocrText) {
+    userBubble.innerHTML = `<em style="color:var(--warn)">No readable text found in the image${files.length>1?'s':''}.</em>`;
+    document.body.classList.remove('ai-busy');
+    return;
+  }
+
+  // Render the user bubble as the OCR'd questionnaire (collapsed if huge)
+  const preview = ocrText.length > 1200 ? ocrText.slice(0,1200) + '\n…[truncated in preview, full text sent to AI]' : ocrText;
+  userBubble.innerHTML =
+    `<div class="scan-tag">📷 SCANNED · ${files.length} image${files.length>1?'s':''} · ${ocrText.length} chars</div>` +
+    `<pre class="scan-text">${escapeHtml(preview)}</pre>`;
+  chatlog.scrollTop = chatlog.scrollHeight;
+
+  // Build a high-accuracy questionnaire-answering prompt and stream the answer
+  // For questionnaire scans: retrieve aggressively from KB and pin temperature low.
+  // We also retrieve PER QUESTION (split by lines starting with a number) and merge
+  // unique chunks — gives the small model the right facts for each item.
+  const questions = ocrText.split(/\n(?=\s*\d+[.)]\s)/).map(s=>s.trim()).filter(Boolean);
+  const seen = new Map(); // chunkId -> chunk
+  for (const q of questions.length ? questions : [ocrText]) {
+    const { citations: cs } = buildSystem(q, { topK: 4 });
+    for (const c of cs || []) if (!seen.has(c.id)) seen.set(c.id, c);
+  }
+  const ctxChunks = Array.from(seen.values()).slice(0, 12);
+  const ctxText = ctxChunks.map((c,i)=>`[${i+1}] (${c.sourceFile}${c.pageHint?` p.${c.pageHint}`:''})\n${c.text}`).join('\n\n');
+  const system =
+    `You are GHOST, a precise tutor for the COMP 304 (Intro to AI) course. ` +
+    `Answer multiple-choice questions using the [CONTEXT] below as the primary source of truth. ` +
+    `Only use general knowledge if the context truly does not cover the question, and then say "(general knowledge)". ` +
+    `Be deterministic. Never invent facts. Pick exactly one letter A–E per question.\n\n` +
+    (ctxText ? `[CONTEXT]\n${ctxText}\n[/CONTEXT]` : `[CONTEXT]\n(no relevant lecture chunks found)\n[/CONTEXT]`);
+
+  const userMsg =
+    `The following text was OCR'd from a physical questionnaire/exam. ` +
+    `OCR may have small errors — interpret charitably. ` +
+    `For EACH numbered question, output exactly:\n` +
+    `  Q<number>. <restated question (1 line, fixing OCR typos)>\n` +
+    `  Answer: <single letter A-E>\n` +
+    `  Why: <1-2 sentence justification, citing [n] if from CONTEXT>\n\n` +
+    `If a question lists choices A-E, pick the single best letter. ` +
+    `If you genuinely cannot decide, answer E and say so.\n\n` +
+    `=== QUESTIONNAIRE ===\n${ocrText}\n=== END ===`;
+
+  const aiBubble = addMessage('ai', '', ctxChunks.slice(0,5).map(c => ({sourceFile:c.sourceFile, pageHint:c.pageHint})));
+  aiBubble.__buf = '';
+  const thinker = thinkingDots();
+  aiBubble.appendChild(thinker);
+
+  // No prior chat history for scans — keeps the model focused on the questionnaire.
+  const messages = [{ role:'system', content: system }, { role:'user', content: userMsg }];
+  const append = throttledAppender(aiBubble, () => { if (thinker.parentNode) thinker.remove(); });
+
+  try {
+    const final = await callOllama(messages, append, undefined, { options: { temperature: 0, top_p: 0.1, num_ctx: 4096 } });
+    STATE.history.push({ role:'user', content: `[scanned questionnaire, ${ocrText.length} chars]` });
+    STATE.history.push({ role:'assistant', content: final });
+    saveHistory();
+  } catch (e) {
+    if (thinker.parentNode) thinker.remove();
+    aiBubble.innerHTML = `<em style="color:var(--warn)">⚠ ${escapeHtml(e.message)}</em>`;
+    pingOllama();
+  } finally {
+    document.body.classList.remove('ai-busy');
+  }
+}
+
 // ---------- voice ----------
 function setupVoice() {
   const btn = $('#mic-btn');
@@ -828,6 +935,7 @@ function init() {
 
   // voice
   setupVoice();
+  setupChatScan();
 
   // service worker
   if ('serviceWorker' in navigator) {

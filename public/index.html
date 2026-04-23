@@ -40,7 +40,11 @@
 
     <form class="composer" id="composer" autocomplete="off">
       <button type="button" class="icon-btn" id="mic-btn" title="Voice input" aria-label="Voice input">◉</button>
-      <textarea id="input" rows="1" placeholder="ask the ghost…  (/help)" enterkeyhint="send"></textarea>
+      <button type="button" class="icon-btn" id="scan-btn" title="Scan questionnaire (camera, multi-shot)" aria-label="Scan with camera">📷</button>
+      <button type="button" class="icon-btn" id="scan-pick-btn" title="Pick image(s) to OCR" aria-label="Pick image">🖼</button>
+      <input type="file" id="scan-cam" accept="image/*" capture="environment" multiple hidden>
+      <input type="file" id="scan-pick" accept="image/*" multiple hidden>
+      <textarea id="input" rows="1" placeholder="ask the ghost…  (/help · 📷 to scan)" enterkeyhint="send"></textarea>
       <button type="submit" class="send-btn" id="send-btn" aria-label="Send">SEND</button>
     </form>
     <div class="hint" id="hint">enter sends · shift+enter newline · /help for commands</div>

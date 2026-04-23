@@ -268,3 +268,17 @@ body.ai-busy #ai-state::after { content:" · …"; color:var(--accent); }
 /* --- camera + ingest row --- */
 .upload-row { display:flex; gap:8px; flex-wrap:wrap; }
 .upload-btn.cam { background:#001a14; }
+
+/* --- in-chat scan (OCR'd questionnaire bubble) --- */
+.scan-tag {
+  font: 600 10px var(--mono); letter-spacing:.15em;
+  color: var(--accent); border:1px solid var(--accent);
+  padding: 2px 6px; display:inline-block; margin-bottom:6px;
+}
+.scan-text {
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 160px; overflow:auto;
+  background: #050505; border:1px dashed #1a1a1a;
+  padding:6px 8px; font: 11px/1.4 var(--mono);
+  color: #b8b8b8; margin:0;
+}
