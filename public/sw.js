@@ -1,5 +1,5 @@
 /* GHOST · CONTEXT — service worker (app shell offline) */
-const VER = 'ghost-v3';
+const VER = 'ghost-v4';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'icons/icon.svg', 'kb-prebuilt.json'];
 
 self.addEventListener('install', e => {

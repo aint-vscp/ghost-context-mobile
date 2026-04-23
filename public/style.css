@@ -130,34 +130,89 @@ main { position: relative; overflow: hidden; }
 }
 .cite span { display: inline-block; margin-right: 6px; padding: 1px 5px; border: 1px solid var(--line-2); }
 
-/* composer */
+/* composer — mobile-first, flex, ≥44px touch targets, no loud accents */
 .composer {
-  display: grid; grid-template-columns: auto 1fr auto;
-  gap: 6px; padding: 8px; padding-bottom: calc(8px + var(--safe-b));
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 8px;
+  padding-bottom: calc(8px + var(--safe-b));
   background: var(--bg);
   border-top: 1px solid var(--line);
 }
+.composer-actions {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
 #input, #quick-input {
   resize: none;
+  flex: 1 1 auto;
+  min-width: 0;
   width: 100%;
   background: var(--bg-1);
   color: var(--fg);
   border: 1px solid var(--line-2);
-  padding: 9px 10px;
-  font-family: var(--ui); font-size: 15px;
+  border-radius: 2px;
+  padding: 11px 12px;
+  font-family: var(--ui); font-size: 16px;     /* 16px prevents iOS auto-zoom */
+  line-height: 1.35;
   max-height: 35vh;
   outline: none;
+  transition: border-color .15s ease;
 }
 #input:focus, #quick-input:focus { border-color: var(--acc-dim); }
-.icon-btn, .send-btn {
-  background: var(--bg-1); color: var(--fg); border: 1px solid var(--line-2);
-  font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
-  padding: 0 12px; cursor: pointer; min-width: 44px;
+
+.icon-btn {
+  width: 44px; height: 44px;
+  min-width: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  background: var(--bg-1);
+  color: var(--muted);                          /* neutral grey, not green */
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  cursor: pointer;
+  -webkit-touch-callout: none;
+  user-select: none;
+  transition: color .15s ease, background .15s ease, border-color .15s ease, transform .08s ease;
 }
-.icon-btn { color: var(--acc); font-size: 18px; }
-.icon-btn.rec { color: var(--warn); animation: pulse 1.2s ease-in-out infinite; }
+.icon-btn svg { display: block; pointer-events: none; }
+.icon-btn:hover { color: var(--fg); border-color: #2a2a2a; }
+.icon-btn:active { transform: scale(.94); background: var(--bg-2); }
+.icon-btn.rec {
+  color: var(--warn);
+  border-color: rgba(255,95,95,.5);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.send-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 44px;
+  padding: 0 14px;
+  background: var(--bg-1);
+  color: var(--fg);
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .14em;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease, transform .08s ease;
+}
+.send-btn:hover { color: var(--acc); border-color: var(--acc-dim); }
 .send-btn:active { transform: scale(.97); }
 .send-btn[disabled] { opacity: .4; }
+.send-btn svg { color: var(--acc-dim); }
+.send-btn:hover svg { color: var(--acc); }
+
+/* On narrow phones (≤380px), drop the SEND label so the textarea has room */
+@media (max-width: 380px) {
+  .send-btn span { display: none; }
+  .send-btn { padding: 0; width: 44px; }
+  .composer { gap: 4px; padding: 6px; }
+  .composer-actions { gap: 2px; }
+}
+
 .hint {
   font-family: var(--mono); font-size: 10.5px; color: var(--muted);
   text-align: center; padding: 0 10px 8px; padding-bottom: calc(8px + var(--safe-b));
