@@ -25,7 +25,7 @@ function loadCfg() {
   let c = {};
   try { c = JSON.parse(localStorage.getItem('ghost.cfg') || '{}'); } catch {}
   return Object.assign({
-    endpoint: 'http://localhost:11434',
+    endpoint: '/api/ollama',
     model: 'qwen2.5:1.5b',
     temp: 0.4,
     topK: 4,
@@ -254,13 +254,23 @@ function addMessage(role, text, citations=null) {
   return b;
 }
 
+function thinkingDots() {
+  const span = document.createElement('span');
+  span.className = 'thinking';
+  span.innerHTML = '<i></i><i></i><i></i> <small>thinking…</small>';
+  return span;
+}
+
 // ---------- streaming chat to Ollama ----------
 async function callOllama(messages, onToken, signal) {
-  const url = STATE.cfg.endpoint.replace(/\/$/,'') + '/api/chat';
+  const base = STATE.cfg.endpoint.replace(/\/$/,'');
+  // accept either same-origin proxy ("/api/ollama") or absolute "http://host:11434"
+  const url = base.endsWith('/api') || base.endsWith('/api/ollama') ? base + '/chat' : base + '/api/chat';
   const body = {
     model: STATE.cfg.model,
     messages,
     stream: true,
+    keep_alive: '24h', // pin model in RAM so it doesn't reload on every send (huge on mobile)
     options: { temperature: STATE.cfg.temp, num_thread: 6, num_ctx: 2048 },
   };
   const res = await fetch(url, {
@@ -288,10 +298,11 @@ async function callOllama(messages, onToken, signal) {
   }
 }
 
-// rAF-throttled appender (caps re-renders ~30fps)
-function throttledAppender(el) {
-  let pending = '', raf = 0, last = 0;
+// rAF-throttled appender (caps re-renders ~30fps); calls onFirst() on first chunk
+function throttledAppender(el, onFirst) {
+  let pending = '', raf = 0, last = 0, gotFirst = false;
   return (chunk) => {
+    if (!gotFirst) { gotFirst = true; if (onFirst) try { onFirst(); } catch {} }
     pending += chunk;
     if (raf) return;
     raf = requestAnimationFrame((ts) => {
@@ -351,7 +362,11 @@ async function sendChat(text) {
   const { system, citations } = buildSystem(text, { topK: STATE.cfg.topK });
   const aiBubble = addMessage('ai', '');
   aiBubble.__buf = '';
-  const append = throttledAppender(aiBubble);
+  // show thinking indicator until first token arrives
+  const thinker = thinkingDots();
+  aiBubble.appendChild(thinker);
+  document.body.classList.add('ai-busy');
+  const append = throttledAppender(aiBubble, () => { if (thinker.parentNode) thinker.remove(); });
 
   // assemble message history (cap to last 10 turns)
   const msgs = [{ role:'system', content: system }];
@@ -372,10 +387,12 @@ async function sendChat(text) {
       aiBubble.parentElement.appendChild(c);
     }
   } catch (e) {
+    if (thinker.parentNode) thinker.remove();
     aiBubble.innerHTML = `<em style="color:var(--warn)">⚠ ${escapeHtml(e.message)}</em>`;
     pingOllama();
   } finally {
     currentAbort = null;
+    document.body.classList.remove('ai-busy');
   }
 }
 
@@ -422,9 +439,12 @@ async function runQuick(q) {
   $('#quick-meta').textContent = '… retrieving';
   const { system, citations } = buildSystem(q, { topK: 1, oneShot: true });
   $('#quick-meta').textContent = citations.length ? `ctx: ${citations[0].sourceFile}${citations[0].pageHint?` p.${citations[0].pageHint}`:''} · score ${citations[0].score.toFixed(2)}` : 'no context match — general knowledge';
+  out.classList.add('thinking-pulse');
+  out.textContent = '▮ thinking…';
 
-  let pending=''; let raf=0;
+  let pending=''; let raf=0; let first=true;
   const append = (t) => {
+    if (first) { first = false; out.classList.remove('thinking-pulse'); out.textContent = ''; out.__buf=''; }
     pending += t;
     if (raf) return;
     raf = requestAnimationFrame(() => { raf=0; out.__buf += pending; out.textContent = out.__buf; pending=''; });
@@ -432,6 +452,7 @@ async function runQuick(q) {
   try {
     await callOllama([{role:'system',content:system},{role:'user',content:q}], append);
   } catch (e) {
+    out.classList.remove('thinking-pulse');
     out.textContent = '⚠ ' + e.message; pingOllama();
   }
 }
@@ -661,30 +682,69 @@ function setupVoice() {
 
 // ---------- model discovery / Ollama ping ----------
 async function pingOllama() {
-  const url = STATE.cfg.endpoint.replace(/\/$/,'') + '/api/tags';
+  // when endpoint is same-origin proxy, use the server's healthz which reports
+  // the upstream Ollama status (avoids CORS entirely on phones)
+  const ep = STATE.cfg.endpoint.replace(/\/$/,'');
+  const sameOrigin = ep.startsWith('/');
+  const url = sameOrigin ? '/healthz/ollama' : (ep + '/api/tags');
   try {
     const r = await fetch(url, { cache:'no-store' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const j = await r.json();
-    STATE.models = (j.models || []).map(m => m.name);
+    if (sameOrigin) {
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'upstream not ok');
+      STATE.models = j.models || [];
+    } else {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      STATE.models = (j.models || []).map(m => m.name);
+    }
     setAiState(true);
     refreshModelDropdown();
+    warmModel(); // pin into RAM in the background
   } catch (e) {
-    // CORS failures show as TypeError "Failed to fetch" with no .status — surface a hint
     const isCORSish = e instanceof TypeError;
     console.warn('[ghost] ollama ping failed for', url, e);
     setAiState(false, isCORSish
-      ? `AI offline. Reach to ${STATE.cfg.endpoint} failed (likely CORS or Ollama not running). Start Ollama with OLLAMA_ORIGINS=* and retry.`
-      : `AI offline. ${e.message} at ${STATE.cfg.endpoint}.`);
+      ? `AI offline. Cannot reach ${ep} from the browser (CORS or network). If using direct mode, restart Ollama with OLLAMA_ORIGINS=*. Best fix: keep endpoint as "/api/ollama" so server.js proxies for you.`
+      : `AI offline. ${e.message}. Endpoint: ${ep}. Make sure 'ollama serve' is running.`);
   }
 }
+// Send empty prompt with keep_alive so Ollama loads + pins the model in RAM.
+// Cheap on desktop, ~once per app open on phone — saves the painful first-send delay.
+let _warmedFor = null;
+async function warmModel() {
+  const ep = STATE.cfg.endpoint.replace(/\/$/,'');
+  const sameOrigin = ep.startsWith('/');
+  const base = sameOrigin ? ep : ep + '/api';
+  const url = (base.endsWith('/api') || base.endsWith('/api/ollama')) ? base + '/generate' : ep + '/api/generate';
+  const key = STATE.cfg.model + '@' + ep;
+  if (_warmedFor === key) return;
+  try {
+    await fetch(url, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ model: STATE.cfg.model, prompt: '', keep_alive: '24h', stream: false })
+    });
+    _warmedFor = key;
+  } catch (e) { /* not fatal */ }
+}
+
 function setAiState(ok, msg) {
   const el = $('#ai-state');
   el.dataset.ok = ok ? '1' : '0';
   el.textContent = ok ? 'AI · online' : 'AI · offline';
   const banner = $('#ai-banner');
   banner.hidden = !!ok;
-  if (!ok && msg) banner.textContent = msg;
+  if (!ok) {
+    banner.innerHTML = '';
+    const span = document.createElement('span');
+    span.textContent = msg || 'AI offline — Ollama not reachable.';
+    const btn = document.createElement('button');
+    btn.textContent = 'RETRY';
+    btn.className = 'banner-retry';
+    btn.onclick = () => pingOllama();
+    banner.appendChild(span);
+    banner.appendChild(btn);
+  }
 }
 function refreshModelDropdown() {
   const sel = $('#cfg-model');
@@ -735,8 +795,9 @@ function init() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#quick-form').requestSubmit(); }
   });
 
-  // upload / dropzone
+  // upload / camera / dropzone
   $('#file-input').addEventListener('change', (e) => handleFiles(e.target.files));
+  $('#camera-input').addEventListener('change', (e) => handleFiles(e.target.files));
   const dz = $('#dropzone');
   ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('over'); }));
   ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('over'); }));

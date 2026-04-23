@@ -237,3 +237,14 @@ node server.js                 # serve, then visit http://localhost:8787
 ## 📜 License
 
 Personal project — all yours.
+
+### Why AI offline no longer happens
+
+server.js now proxies all Ollama traffic through `/api/ollama/*` (same-origin),
+so the browser never makes a cross-origin request and CORS cannot break the chat.
+The endpoint in Settings defaults to `/api/ollama` — leave it as-is unless you
+want to point at a different machine.
+
+The model is pinned in RAM with `keep_alive: 24h` and warmed on app open, so
+the first reply isn't a 10-second cold start.
+

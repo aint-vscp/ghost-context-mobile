@@ -69,10 +69,16 @@
           <div class="vault-title">CLASSIFIED · DOCUMENT VAULT</div>
           <div class="muted" id="lib-stats">…</div>
         </div>
+      <div class="upload-row">
         <label class="upload-btn">
-          INGEST
+          📂 INGEST FILES
           <input type="file" id="file-input" accept=".pdf,.pptx,.md,.markdown,.txt,image/*,.png,.jpg,.jpeg,.webp,.bmp" multiple hidden>
         </label>
+        <label class="upload-btn cam">
+          📷 TAKE PHOTOS
+          <input type="file" id="camera-input" accept="image/*" capture="environment" multiple hidden>
+        </label>
+      </div>
       </div>
 
       <div class="dropzone" id="dropzone">drop PDF / PPTX / MD / images (PNG, JPG, WEBP) — multi-select supported</div>
